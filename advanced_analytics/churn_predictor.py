@@ -166,5 +166,29 @@ def predict_single_user_churn(plan, channel, session_count, recency, device_type
         print(f"Prediction error: {e}")
         return 0.5
 
+def get_feature_importances():
+    """
+    Returns the feature importances of the trained model.
+    """
+    if not os.path.exists(MODEL_PATH):
+        # Return fallback features if model not trained
+        features = ['plan', 'channel', 'session_count', 'recency', 'device_type', 'search_count', 'pv_count', 'total_events', 'total_revenue']
+        importances = [0.05, 0.05, 0.15, 0.40, 0.05, 0.05, 0.05, 0.10, 0.10]
+        return [{'feature': f, 'importance': imp} for f, imp in zip(features, importances)]
+        
+    try:
+        model = joblib.load(MODEL_PATH)
+        features = ['plan', 'channel', 'session_count', 'recency', 'device_type', 'search_count', 'pv_count', 'total_events', 'total_revenue']
+        importances = list(model.feature_importances_)
+        
+        # Sort importances descending
+        feature_imp = [{'feature': f, 'importance': float(imp)} for f, imp in zip(features, importances)]
+        feature_imp = sorted(feature_imp, key=lambda x: x['importance'], reverse=True)
+        return feature_imp
+    except Exception as e:
+        print(f"Error loading feature importances: {e}")
+        return []
+
 if __name__ == "__main__":
     train_churn_model()
+

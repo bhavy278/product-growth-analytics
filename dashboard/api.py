@@ -1,10 +1,15 @@
 import os
 import sys
+import time
+import queue
+import uuid
+import threading
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import pandas as pd
 import numpy as np
 
@@ -14,13 +19,74 @@ sys.path.append("/Users/bhavy/Desktop/dev-space/antigravity-projects-2/product-g
 from pipelines.ab_testing import calculate_ab_metrics, run_chi_square
 from advanced_analytics.cohort_analysis import calculate_cohort_retention
 from advanced_analytics.segmentation import calculate_rfm_segments
-from advanced_analytics.churn_predictor import predict_single_user_churn
+from advanced_analytics.churn_predictor import predict_single_user_churn, get_feature_importances
+from advanced_analytics.survival_analysis import calculate_survival_ltv
 
 app = FastAPI(title="Vana | Growth Analytics & A/B Testing API")
 
 # Database Connection
 db_url = "postgresql://postgres:postgres_password@localhost:5436/growth_analytics"
 engine = create_engine(db_url)
+
+# In-Memory Event Ingestion Buffer
+class EventBuffer:
+    def __init__(self, db_engine, batch_size=50, flush_interval=5.0):
+        self.engine = db_engine
+        self.batch_size = batch_size
+        self.flush_interval = flush_interval
+        self.queue = queue.Queue()
+        self.last_flush = time.time()
+        self.lock = threading.Lock()
+        
+        # Periodic background flush thread
+        self.worker = threading.Thread(target=self._worker_loop, daemon=True)
+        self.worker.start()
+        
+    def add_event(self, user_id: str, event_type: str, event_time: str = None):
+        if not event_time:
+            event_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        event_id = f"EVT_{uuid.uuid4().hex[:8].upper()}"
+        
+        self.queue.put({
+            'event_id': event_id,
+            'user_id': user_id,
+            'event_time': event_time,
+            'event_type': event_type
+        })
+        
+    def _worker_loop(self):
+        while True:
+            time.sleep(0.5)
+            qsize = self.queue.qsize()
+            elapsed = time.time() - self.last_flush
+            
+            if qsize >= self.batch_size or (qsize > 0 and elapsed >= self.flush_interval):
+                self.flush()
+                
+    def flush(self):
+        with self.lock:
+            batch = []
+            while not self.queue.empty():
+                try:
+                    batch.append(self.queue.get_nowait())
+                except queue.Empty:
+                    break
+            
+            if not batch:
+                return
+                
+            self.last_flush = time.time()
+            
+            # SQL Bulk Insert
+            try:
+                with self.engine.begin() as conn:
+                    stmt = text("INSERT INTO raw_events (event_id, user_id, event_time, event_type) VALUES (:event_id, :user_id, :event_time, :event_type)")
+                    conn.execute(stmt, batch)
+                print(f"[EventBuffer] Successfully flushed {len(batch)} events to raw_events table.")
+            except Exception as e:
+                print(f"[EventBuffer] Error flushing batch to database: {e}")
+
+event_buffer = EventBuffer(engine)
 
 # Mount static files (like CSS) if needed
 static_dir = "/Users/bhavy/Desktop/dev-space/antigravity-projects-2/product-growth-analytics/dashboard"
@@ -37,11 +103,22 @@ class ChurnPredictionRequest(BaseModel):
     total_events: int
     total_revenue: float
 
+class TrackRequest(BaseModel):
+    user_id: str
+    event_type: str
+    event_time: str = None
+
+class VariantInput(BaseModel):
+    name: str
+    conversions: int
+    size: int
+
 class SimulationRequest(BaseModel):
     control_conversions: int
     control_size: int
-    variant_conversions: int
-    variant_size: int
+    variant_conversions: int = None
+    variant_size: int = None
+    variants: list[VariantInput] = None
 
 @app.get("/")
 def get_dashboard():
@@ -158,23 +235,12 @@ def get_funnels():
     try:
         # standard steps: Homepage view -> Signup event -> Login event -> Upgrade/Purchase event
         funnel_query = """
-            with homepage_views as (
-                select distinct user_id from fact_events where event_type = 'page_view'
-            ),
-            signups as (
-                select distinct user_id from fact_events where event_type = 'signup'
-            ),
-            logins as (
-                select distinct user_id from fact_events where event_type = 'login'
-            ),
-            upgrades as (
-                select distinct user_id from fact_events where event_type in ('upgrade', 'purchase')
-            )
             select
-                (select count(*) from homepage_views) as homepage,
-                (select count(*) from signups) as signup,
-                (select count(*) from logins) as login,
-                (select count(*) from upgrades) as upgrade
+                count(distinct case when event_type = 'page_view' then user_id end) as homepage,
+                count(distinct case when event_type = 'signup' then user_id end) as signup,
+                count(distinct case when event_type = 'login' then user_id end) as login,
+                count(distinct case when event_type in ('upgrade', 'purchase') then user_id end) as upgrade
+            from fact_events
         """
         funnel_df = pd.read_sql(funnel_query, engine)
         
@@ -250,30 +316,46 @@ def get_experiments():
         
         df = pd.read_sql(stats_query, engine)
         
-        control_size = 0
-        control_conv = 0
-        variant_size = 0
-        variant_conv = 0
+        control_row = df[df['variant'] == 'Control']
+        control_size = int(control_row.iloc[0]['group_size']) if not control_row.empty else 0
+        control_conv = int(control_row.iloc[0]['conversions']) if not control_row.empty else 0
         
-        for _, row in df.iterrows():
-            if row['variant'] == 'Control':
-                control_size = int(row['group_size'])
-                control_conv = int(row['conversions'])
-            elif row['variant'] == 'Variant':
-                variant_size = int(row['group_size'])
-                variant_conv = int(row['conversions'])
-                
-        metrics = calculate_ab_metrics(control_conv, control_size, variant_conv, variant_size)
-        chi_stats = run_chi_square(control_conv, control_size, variant_conv, variant_size)
+        treatment_rows = df[(df['variant'] != 'Control') & (df['variant'] != 'N/A')]
+        
+        variants_list = []
+        for _, row in treatment_rows.iterrows():
+            variants_list.append({
+                'name': row['variant'],
+                'size': int(row['group_size']),
+                'conversions': int(row['conversions'])
+            })
+            
+        # Legacy single-variant support
+        first_variant_name = 'Variant'
+        first_variant_size = 0
+        first_variant_conv = 0
+        if len(variants_list) > 0:
+            first_variant_name = variants_list[0]['name']
+            first_variant_size = variants_list[0]['size']
+            first_variant_conv = variants_list[0]['conversions']
+            
+        legacy_metrics = calculate_ab_metrics(control_conv, control_size, first_variant_conv, first_variant_size)
+        legacy_chi_stats = run_chi_square(control_conv, control_size, first_variant_conv, first_variant_size)
+        
+        # Multi-variant metrics
+        multi_metrics = calculate_ab_metrics(control_conv, control_size, variants=variants_list)
+        multi_chi_stats = run_chi_square(control_conv, control_size, variants=variants_list)
         
         return {
             'experiment_id': 'EXP_2026_CTA_COLOR',
             'control_size': control_size,
             'control_conversions': control_conv,
-            'variant_size': variant_size,
-            'variant_conversions': variant_conv,
-            'z_test': metrics,
-            'chi_square': chi_stats
+            'variant_size': first_variant_size,
+            'variant_conversions': first_variant_conv,
+            'z_test': legacy_metrics,
+            'chi_square': legacy_chi_stats,
+            'variants': multi_metrics.get('variants', []),
+            'global_chi_square': multi_chi_stats
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -307,21 +389,53 @@ def predict_churn(req: ChurnPredictionRequest):
 @app.post("/api/simulate-experiment")
 def simulate_experiment(req: SimulationRequest):
     try:
-        metrics = calculate_ab_metrics(
-            req.control_conversions,
-            req.control_size,
-            req.variant_conversions,
-            req.variant_size
-        )
-        chi_stats = run_chi_square(
-            req.control_conversions,
-            req.control_size,
-            req.variant_conversions,
-            req.variant_size
-        )
-        return {
-            'z_test': metrics,
-            'chi_square': chi_stats
-        }
+        if req.variants is not None and len(req.variants) > 0:
+            variants_list = [{'name': v.name, 'conversions': v.conversions, 'size': v.size} for v in req.variants]
+            multi_metrics = calculate_ab_metrics(req.control_conversions, req.control_size, variants=variants_list)
+            multi_chi_stats = run_chi_square(req.control_conversions, req.control_size, variants=variants_list)
+            
+            first_v = variants_list[0]
+            legacy_metrics = calculate_ab_metrics(req.control_conversions, req.control_size, first_v['conversions'], first_v['size'])
+            legacy_chi_stats = run_chi_square(req.control_conversions, req.control_size, first_v['conversions'], first_v['size'])
+            
+            return {
+                'z_test': legacy_metrics,
+                'chi_square': legacy_chi_stats,
+                'variants': multi_metrics.get('variants', []),
+                'global_chi_square': multi_chi_stats
+            }
+        else:
+            v_conv = req.variant_conversions if req.variant_conversions is not None else 0
+            v_size = req.variant_size if req.variant_size is not None else 0
+            metrics = calculate_ab_metrics(req.control_conversions, req.control_size, v_conv, v_size)
+            chi_stats = run_chi_square(req.control_conversions, req.control_size, v_conv, v_size)
+            return {
+                'z_test': metrics,
+                'chi_square': chi_stats
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/churn-features")
+def get_churn_features():
+    try:
+        importances = get_feature_importances()
+        return importances
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/track")
+def track_event(req: TrackRequest):
+    try:
+        event_buffer.add_event(req.user_id, req.event_type, req.event_time)
+        return {"status": "queued"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/survival-ltv")
+def get_survival_ltv():
+    try:
+        data = calculate_survival_ltv()
+        return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

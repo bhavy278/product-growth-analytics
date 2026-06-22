@@ -175,6 +175,15 @@
                         <canvas id="channelRevenueChart"></canvas>
                     </div>
                 </div>
+                <div class="glass-card" style="grid-column: span 2; height: 400px; position: relative;">
+                    <div class="card-loader hidden" id="loader-survival">
+                        <div class="small-spinner"></div>
+                    </div>
+                    <h3 class="chart-title">⏳ Customer Retention Curves (Kaplan-Meier Survival Analysis)</h3>
+                    <div class="chart-wrapper" style="height: 320px;">
+                        <canvas id="survivalCurvesChart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -290,12 +299,12 @@
                         </div>
                         <div class="form-grid">
                             <div class="form-group">
-                                <label for="sim-v-size">Variant Group Size (N)</label>
-                                <input type="number" id="sim-v-size" value="1000" min="10">
+                                <label for="sim-v-sizes">Treatment Variant Sizes (comma-separated)</label>
+                                <input type="text" id="sim-v-sizes" value="1000">
                             </div>
                             <div class="form-group">
-                                <label for="sim-v-conv">Variant Conversions</label>
-                                <input type="number" id="sim-v-conv" value="110" min="0">
+                                <label for="sim-v-convs">Treatment Variant Conversions (comma-separated)</label>
+                                <input type="text" id="sim-v-convs" value="110">
                             </div>
                         </div>
                         <button type="submit" class="btn-submit" style="width:100%;">Calculate Statistical Significance</button>
@@ -303,13 +312,18 @@
 
                     <div id="sim-result-card" class="result-card" style="display:none;">
                         <h4 style="margin-bottom:0.75rem;">Significance Engine Report</h4>
-                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>Lift %:</strong> <span id="sim-lift">0.0%</span></p>
-                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>Z-Score:</strong> <span id="sim-z-score">0.0</span></p>
-                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>P-value:</strong> <span id="sim-p-value">1.0</span></p>
-                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>95% Confidence Interval:</strong> [<span id="sim-ci-lower">0.0%</span>, <span id="sim-ci-upper">0.0%</span>]</p>
-                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:0.75rem;">
-                            <strong>Outcome:</strong> <span id="sim-outcome" class="significance-badge success">Significance Detected</span>
-                        </p>
+                        <div id="sim-results-container"></div>
+                    </div>
+                </div>
+
+                <!-- ML Feature Importances -->
+                <div class="glass-card" style="grid-column: span 2; height: 400px; position: relative;">
+                    <div class="card-loader hidden" id="loader-churn-features">
+                        <div class="small-spinner"></div>
+                    </div>
+                    <h3 class="chart-title">📊 Random Forest Feature Importance Weights</h3>
+                    <div class="chart-wrapper" style="height: 320px;">
+                        <canvas id="churnFeaturesChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -325,7 +339,9 @@
             exec: false,
             funnel: false,
             retention: false,
-            experiment: false
+            experiment: false,
+            revenue: false,
+            tools: false
         };
 
         function showCardLoader(id) {
@@ -431,6 +447,22 @@
                     loadedStates.experiment = true;
                 } finally {
                     hideCardLoader("loader-experiment");
+                }
+            } else if (viewName === 'revenue' && !loadedStates.revenue) {
+                try {
+                    showCardLoader("loader-survival");
+                    await fetchSurvivalLTV();
+                    loadedStates.revenue = true;
+                } finally {
+                    hideCardLoader("loader-survival");
+                }
+            } else if (viewName === 'tools' && !loadedStates.tools) {
+                try {
+                    showCardLoader("loader-churn-features");
+                    await fetchChurnFeatures();
+                    loadedStates.tools = true;
+                } finally {
+                    hideCardLoader("loader-churn-features");
                 }
             }
         }
@@ -551,33 +583,98 @@
         async function simulateABTest() {
             const control_size = parseInt(document.getElementById("sim-c-size").value);
             const control_conversions = parseInt(document.getElementById("sim-c-conv").value);
-            const variant_size = parseInt(document.getElementById("sim-v-size").value);
-            const variant_conversions = parseInt(document.getElementById("sim-v-conv").value);
+            const sizesStr = document.getElementById("sim-v-sizes").value;
+            const convsStr = document.getElementById("sim-v-convs").value;
+            
+            const sizes = sizesStr.split(',').map(s => parseInt(s.trim()));
+            const convs = convsStr.split(',').map(c => parseInt(c.trim()));
+            
+            const payload = {
+                control_conversions,
+                control_size
+            };
+            
+            if (sizes.length > 1 && convs.length === sizes.length) {
+                payload.variants = sizes.map((s, idx) => ({
+                    name: `Variant ${String.fromCharCode(65 + idx)}`,
+                    size: s,
+                    conversions: convs[idx]
+                }));
+            } else {
+                payload.variant_size = sizes[0] || 0;
+                payload.variant_conversions = convs[0] || 0;
+            }
             
             try {
                 const res = await fetch("/api/simulate-experiment", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ control_conversions, control_size, variant_conversions, variant_size })
+                    body: JSON.stringify(payload)
                 });
                 const data = await res.json();
                 
                 const resultCard = document.getElementById("sim-result-card");
                 resultCard.style.display = "block";
                 
-                document.getElementById("sim-lift").innerText = (data.z_test.lift_pct >= 0 ? "+" : "") + data.z_test.lift_pct.toFixed(2) + "%";
-                document.getElementById("sim-z-score").innerText = data.z_test.z_score.toFixed(3);
-                document.getElementById("sim-p-value").innerText = data.z_test.p_value.toFixed(4);
-                document.getElementById("sim-ci-lower").innerText = (data.z_test.ci_lower * 100).toFixed(2) + "%";
-                document.getElementById("sim-ci-upper").innerText = (data.z_test.ci_upper * 100).toFixed(2) + "%";
+                const container = document.getElementById("sim-results-container");
+                container.innerHTML = "";
                 
-                const outcome = document.getElementById("sim-outcome");
-                if (data.z_test.significant) {
-                    outcome.innerText = "Significant Lift Detected";
-                    outcome.className = "significance-badge success";
+                if (data.variants && data.variants.length > 0) {
+                    const globalSig = data.global_chi_square.significant;
+                    let html = `
+                        <div style="margin-bottom: 1rem; padding: 0.5rem; border-radius: 4px; background: ${globalSig ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; color: ${globalSig ? 'var(--emerald)' : 'var(--rose)'}; font-weight: 600;">
+                            Global Chi-Square Test: ${globalSig ? 'Significant Difference' : 'No Significant Difference'} (p = ${data.global_chi_square.p_value.toFixed(4)})
+                        </div>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; color: var(--text-secondary);">
+                            <thead>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); text-align: left;">
+                                    <th style="padding: 0.4rem 0;">Group</th>
+                                    <th style="padding: 0.4rem 0;">Conv. Rate</th>
+                                    <th style="padding: 0.4rem 0;">Lift</th>
+                                    <th style="padding: 0.4rem 0;">p-value</th>
+                                    <th style="padding: 0.4rem 0; text-align: right;">Significant?</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                                    <td style="padding: 0.4rem 0; font-weight: 600;">Control</td>
+                                    <td style="padding: 0.4rem 0;">${(data.z_test.control_rate * 100).toFixed(2)}%</td>
+                                    <td style="padding: 0.4rem 0;">-</td>
+                                    <td style="padding: 0.4rem 0;">-</td>
+                                    <td style="padding: 0.4rem 0; text-align: right;">-</td>
+                                </tr>
+                    `;
+                    
+                    data.variants.forEach(v => {
+                        html += `
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                                <td style="padding: 0.4rem 0; font-weight: 600; color: var(--text-primary);">${v.name}</td>
+                                <td style="padding: 0.4rem 0;">${(v.rate * 100).toFixed(2)}%</td>
+                                <td style="padding: 0.4rem 0; color: ${v.lift_pct >= 0 ? 'var(--emerald)' : 'var(--rose)'};">${v.lift_pct >= 0 ? '+' : ''}${v.lift_pct.toFixed(1)}%</td>
+                                <td style="padding: 0.4rem 0;">${v.p_value.toFixed(4)}</td>
+                                <td style="padding: 0.4rem 0; text-align: right;">
+                                    <span class="significance-badge ${v.significant ? 'success' : 'failed'}" style="font-size:0.7rem; padding: 0.1rem 0.3rem;">
+                                        ${v.significant ? 'Yes' : 'No'}
+                                    </span>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += `</tbody></table>`;
+                    container.innerHTML = html;
                 } else {
-                    outcome.innerText = "No Statistically Significant Difference";
-                    outcome.className = "significance-badge failed";
+                    container.innerHTML = `
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>Lift %:</strong> <span id="sim-lift">${(data.z_test.lift_pct >= 0 ? "+" : "") + data.z_test.lift_pct.toFixed(2)}%</span></p>
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>Z-Score:</strong> <span id="sim-z-score">${data.z_test.z_score.toFixed(3)}</span></p>
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>P-value:</strong> <span id="sim-p-value">${data.z_test.p_value.toFixed(4)}</span></p>
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>95% Confidence Interval:</strong> [${(data.z_test.ci_lower * 100).toFixed(2)}%, ${(data.z_test.ci_upper * 100).toFixed(2)}%]</p>
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:0.75rem;">
+                            <strong>Outcome:</strong> <span id="sim-outcome" class="significance-badge ${data.z_test.significant ? 'success' : 'failed'}">
+                                ${data.z_test.significant ? 'Significant Lift Detected' : 'No Statistically Significant Difference'}
+                            </span>
+                        </p>
+                    `;
                 }
             } catch (err) {
                 console.error("Error simulating test:", err);
@@ -766,16 +863,30 @@
         function renderExperimentChart(data) {
             if (charts.experiment) charts.experiment.destroy();
             
-            const controlRate = data.z_test.control_rate * 100;
-            const variantRate = data.z_test.variant_rate * 100;
+            const labels = ['Control'];
+            const rates = [data.z_test.control_rate * 100];
+            const colors = ['#00a8ff'];
+            
+            if (data.variants && data.variants.length > 0) {
+                data.variants.forEach((v, idx) => {
+                    labels.push(v.name);
+                    rates.push(v.rate * 100);
+                    const variantColors = ['#ff6b35', '#10b981', '#ffa502', '#ff4757'];
+                    colors.push(variantColors[idx % variantColors.length]);
+                });
+            } else {
+                labels.push('Variant');
+                rates.push(data.z_test.variant_rate * 100);
+                colors.push('#ff6b35');
+            }
             
             charts.experiment = new Chart(document.getElementById("experimentChart"), {
                 type: 'bar',
                 data: {
-                    labels: ['Control (Blue Button)', 'Variant (Green Button)'],
+                    labels: labels,
                     datasets: [{
-                        data: [controlRate, variantRate],
-                        backgroundColor: ['#00a8ff', '#ff6b35'],
+                        data: rates,
+                        backgroundColor: colors,
                         borderRadius: 8,
                         borderSkipped: false
                     }]
@@ -790,6 +901,104 @@
                             grid: { color: gridColor }, 
                             ticks: { color: textSecondary, font: fontConfig } 
                         }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        async function fetchSurvivalLTV() {
+            try {
+                const res = await fetch("/api/survival-ltv");
+                const data = await res.json();
+                renderSurvivalCurvesChart(data);
+            } catch (err) {
+                console.error("Error loading survival LTV:", err);
+            }
+        }
+
+        async function fetchChurnFeatures() {
+            try {
+                const res = await fetch("/api/churn-features");
+                const data = await res.json();
+                renderChurnFeaturesChart(data);
+            } catch (err) {
+                console.error("Error loading churn features:", err);
+            }
+        }
+
+        function renderSurvivalCurvesChart(data) {
+            if (charts.survival) charts.survival.destroy();
+            
+            const datasets = Object.keys(data).map(plan => {
+                const planData = data[plan];
+                return {
+                    label: `${plan} Plan (LTV: $${planData.ltv.toFixed(0)})`,
+                    data: planData.curve.map(pt => ({ x: pt.day, y: pt.survival_rate * 100 })),
+                    borderColor: planData.color,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    tension: 0.2
+                };
+            });
+            
+            charts.survival = new Chart(document.getElementById("survivalCurvesChart"), {
+                type: 'line',
+                data: {
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { 
+                            type: 'linear',
+                            title: { display: true, text: 'Tenure (Days)', color: legendColor, font: fontConfig },
+                            grid: { color: gridColor }, 
+                            ticks: { color: textSecondary, font: fontConfig } 
+                        },
+                        y: { 
+                            title: { display: true, text: 'Retention Probability (%)', color: legendColor, font: fontConfig },
+                            grid: { color: gridColor }, 
+                            ticks: { color: textSecondary, font: fontConfig }, 
+                            min: 0, 
+                            max: 100 
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: legendColor, font: { family: 'Outfit', size: 11, weight: '600' } } }
+                    }
+                }
+            });
+        }
+
+        function renderChurnFeaturesChart(data) {
+            if (charts.churnFeatures) charts.churnFeatures.destroy();
+            
+            charts.churnFeatures = new Chart(document.getElementById("churnFeaturesChart"), {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.feature),
+                    datasets: [{
+                        data: data.map(d => d.importance * 100),
+                        backgroundColor: 'rgba(138, 112, 255, 0.85)',
+                        borderColor: '#8a70ff',
+                        borderWidth: 1.5,
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: { 
+                            title: { display: true, text: 'Importance Weight (%)', color: legendColor, font: fontConfig },
+                            grid: { color: gridColor }, 
+                            ticks: { color: textSecondary, font: fontConfig } 
+                        },
+                        y: { grid: { display: false }, ticks: { color: textSecondary, font: fontConfig } }
                     },
                     plugins: { legend: { display: false } }
                 }

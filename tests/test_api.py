@@ -72,3 +72,48 @@ def test_predict_churn_endpoint():
     data = res.json()
     assert 'churn_probability' in data
     assert 0.0 <= data['churn_probability'] <= 1.0
+
+def test_churn_features_endpoint():
+    res = client.get("/api/churn-features")
+    assert res.status_code == 200
+    data = res.json()
+    assert isinstance(data, list)
+    if len(data) > 0:
+        assert 'feature' in data[0]
+        assert 'importance' in data[0]
+
+def test_track_endpoint():
+    payload = {
+        "user_id": "USR_999999",
+        "event_type": "page_view"
+    }
+    res = client.post("/api/track", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data['status'] == 'queued'
+
+def test_survival_ltv_endpoint():
+    res = client.get("/api/survival-ltv")
+    assert res.status_code == 200
+    data = res.json()
+    assert 'Pro' in data
+    assert 'Enterprise' in data
+    assert 'ltv' in data['Pro']
+    assert 'curve' in data['Pro']
+
+def test_simulate_experiment_multivariant_endpoint():
+    payload = {
+        "control_conversions": 80,
+        "control_size": 1000,
+        "variants": [
+            {"name": "Variant A", "conversions": 120, "size": 1000},
+            {"name": "Variant B", "conversions": 85, "size": 1000}
+        ]
+    }
+    res = client.post("/api/simulate-experiment", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert 'variants' in data
+    assert len(data['variants']) == 2
+    assert data['global_chi_square']['significant'] is True
+

@@ -60,3 +60,44 @@ def test_chi_square_independence():
     assert res['chi2'] > 0
     assert res['p_value'] < 0.05
     assert res['significant'] is True
+
+def test_ab_metrics_multivariant():
+    variants = [
+        {'name': 'Variant A', 'conversions': 120, 'size': 1000},
+        {'name': 'Variant B', 'conversions': 85, 'size': 1000}
+    ]
+    res = calculate_ab_metrics(
+        control_conversions=80,
+        control_size=1000,
+        variants=variants
+    )
+    
+    assert res['control_rate'] == 0.08
+    assert len(res['variants']) == 2
+    
+    # Variant A has 12% conversion rate (significant lift)
+    var_a = next(v for v in res['variants'] if v['name'] == 'Variant A')
+    assert var_a['rate'] == 0.12
+    assert var_a['lift_pct'] == pytest.approx(50.0)
+    assert var_a['significant'] is True
+    
+    # Variant B has 8.5% conversion rate (not significant lift)
+    var_b = next(v for v in res['variants'] if v['name'] == 'Variant B')
+    assert var_b['rate'] == 0.085
+    assert var_b['significant'] is False
+
+def test_chi_square_multivariant():
+    variants = [
+        {'name': 'Variant A', 'conversions': 120, 'size': 1000},
+        {'name': 'Variant B', 'conversions': 85, 'size': 1000}
+    ]
+    res = run_chi_square(
+        control_conversions=80,
+        control_size=1000,
+        variants=variants
+    )
+    
+    assert res['chi2'] > 0
+    assert res['p_value'] < 0.05
+    assert res['significant'] is True
+

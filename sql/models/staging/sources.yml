@@ -6,8 +6,56 @@ sources:
     schema: public
     tables:
       - name: raw_users
+        columns:
+          - name: user_id
+            tests:
+              - unique
+              - not_null
       - name: raw_sessions
+        columns:
+          - name: session_id
+            tests:
+              - unique
+              - not_null
+          - name: user_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('staging_sources', 'raw_users')
+                  field: user_id
       - name: raw_events
+        columns:
+          - name: event_id
+            tests:
+              - unique
+              - not_null
       - name: raw_subscriptions
+        columns:
+          - name: subscription_id
+            tests:
+              - unique
+              - not_null
+          - name: status
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['active', 'cancelled']
+          - name: plan
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['Free', 'Pro', 'Enterprise']
       - name: raw_payments
+        columns:
+          - name: payment_id
+            tests:
+              - unique
+              - not_null
       - name: raw_experiments
+        columns:
+          - name: user_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('staging_sources', 'raw_users')
+                  field: user_id
