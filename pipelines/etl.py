@@ -70,12 +70,25 @@ def main():
         
         # Load into PostgreSQL staging tables
         table_name = f"raw_{dataset}"
-        print(f"  -> Loading into PostgreSQL table: {table_name}...")
+        print(f"  -> Creating empty schema for table: {table_name}...")
         with engine.connect() as conn:
             conn.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE"))
             conn.commit()
-        df.to_sql(table_name, engine, if_exists='replace', index=False)
+        # Use pandas to create schema (head of 0 rows)
+        df.head(0).to_sql(table_name, engine, if_exists='replace', index=False)
+        
+        # Load using postgres COPY
+        print(f"  -> Bulk copying data into PostgreSQL table: {table_name}...")
+        raw_conn = engine.raw_connection()
+        try:
+            with raw_conn.cursor() as cur:
+                with open(processed_path, 'r') as f:
+                    cur.copy_expert(f"COPY {table_name} FROM STDIN WITH CSV HEADER", f)
+            raw_conn.commit()
+        finally:
+            raw_conn.close()
         print(f"  -> Completed loading {table_name}.")
+
         
     # Save Data Quality Report
     report_path = os.path.join(processed_dir, "data_quality_report.json")
