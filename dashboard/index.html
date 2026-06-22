@@ -20,28 +20,48 @@
 
     <div class="container">
         <!-- Header -->
-        <header class="glass-card">
-            <div class="logo-container">
-                <h1>Product Growth Analytics</h1>
-                <p>Evidence-based growth, conversion tracking, cohort retention, and A/B test significance engine</p>
+        <header>
+            <div class="logo-container" style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.5rem; font-weight: 800; color: var(--primary);">⚡</span>
+                <span style="font-weight: 800; font-size: 1.4rem; color: var(--text-primary); letter-spacing: -0.5px;">DATAVA</span>
             </div>
-            <div>
+            
+            <!-- Navigation Tabs (Center) -->
+            <div class="tabs-container" style="margin-bottom: 0;">
+                <button id="tab-exec" class="tab-btn active" onclick="switchView('exec')">Dashboard</button>
+                <button id="tab-funnel" class="tab-btn" onclick="switchView('funnel')">Funnels</button>
+                <button id="tab-retention" class="tab-btn" onclick="switchView('retention')">Retention</button>
+                <button id="tab-revenue" class="tab-btn" onclick="switchView('revenue')">Revenue</button>
+                <button id="tab-experiment" class="tab-btn" onclick="switchView('experiment')">Experiments</button>
+                <button id="tab-tools" class="tab-btn" onclick="switchView('tools')">ML Predictor</button>
+            </div>
+
+            <!-- Right Actions (User Profile) -->
+            <div style="display: flex; align-items: center; gap: 1.25rem;">
+                <!-- Warehouse Status Badge -->
                 <div class="badge-db">
-                    <span class="pulse-dot" style="width: 8px; height: 8px; background-color: var(--emerald); border-radius: 50%; display: inline-block;"></span>
-                    Warehouse Connected (PostgreSQL)
+                    <span class="pulse-dot" style="width: 7px; height: 7px; background-color: var(--emerald); border-radius: 50%; display: inline-block;"></span>
+                    PostgreSQL
+                </div>
+                <!-- Mock User Avatar -->
+                <div style="display: flex; align-items: center; gap: 0.65rem; border-left: 1px solid rgba(15, 23, 42, 0.08); padding-left: 1.25rem;">
+                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&h=100&q=80" 
+                         alt="User Avatar" 
+                         style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">
+                    <div style="display: flex; flex-direction: column;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); line-height: 1.2;">John Smith</span>
+                        <span style="font-size: 0.7rem; font-weight: 500; color: var(--text-muted);">Admin</span>
+                    </div>
                 </div>
             </div>
         </header>
 
-        <!-- Navigation Tabs -->
-        <div class="tabs-container">
-            <button id="tab-exec" class="tab-btn active" onclick="switchView('exec')">Executive Summary</button>
-            <button id="tab-funnel" class="tab-btn" onclick="switchView('funnel')">Conversion Funnel</button>
-            <button id="tab-retention" class="tab-btn" onclick="switchView('retention')">Cohort Retention</button>
-            <button id="tab-revenue" class="tab-btn" onclick="switchView('revenue')">MRR & ARR Analytics</button>
-            <button id="tab-experiment" class="tab-btn" onclick="switchView('experiment')">A/B Experiments</button>
-            <button id="tab-tools" class="tab-btn" onclick="switchView('tools')">Analytics Tools</button>
+        <!-- Subheading Title -->
+        <div style="margin-bottom: 2rem; border-bottom: 1px solid rgba(15, 23, 42, 0.04); padding-bottom: 1rem;">
+            <h2 style="font-size: 1.75rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px;">Analytics Dashboard</h2>
+            <p style="font-size: 0.9rem; color: var(--text-secondary);">Core metrics, interactive churn simulation, and statistical analysis models</p>
         </div>
+
 
         <!-- KPI Summary Cards (Global context) -->
         <div class="kpi-grid">
@@ -566,8 +586,9 @@
 
         /* Chart.js Rendering Logic */
         const fontConfig = { family: 'Outfit', size: 11, weight: '500' };
-        const gridColor = 'rgba(255, 255, 255, 0.05)';
-        const textSecondary = '#9ca3af';
+        const gridColor = 'rgba(15, 23, 42, 0.05)';
+        const textSecondary = '#64748b';
+        const legendColor = '#475569';
 
         function renderCohortHeatmapTable(cohorts) {
             const table = document.getElementById("cohort-heatmap-table");
@@ -605,9 +626,8 @@
         function renderRetentionCurvesChart(cohorts) {
             if (charts.retention) charts.retention.destroy();
             
-            // We select a subset of cohorts to plot (e.g. 3 oldest cohorts)
             const datasets = cohorts.slice(0, 4).map((c, idx) => {
-                const colors = ['#818cf8', '#10b981', '#f59e0b', '#f43f5e'];
+                const colors = ['#8a70ff', '#10b981', '#f59e0b', '#f43f5e'];
                 const data = [];
                 for (let i = 0; i <= 11; i++) {
                     if (c.retention_rates[i] !== undefined) {
@@ -619,7 +639,7 @@
                     data: data,
                     borderColor: colors[idx % colors.length],
                     backgroundColor: 'transparent',
-                    borderWidth: 2,
+                    borderWidth: 2.5,
                     tension: 0.2
                 };
             });
@@ -638,7 +658,7 @@
                         y: { grid: { color: gridColor }, ticks: { color: textSecondary, font: fontConfig }, min: 0, max: 100 }
                     },
                     plugins: {
-                        legend: { labels: { color: '#f3f4f6', font: { family: 'Outfit', size: 11 } } }
+                        legend: { labels: { color: legendColor, font: { family: 'Outfit', size: 11, weight: '600' } } }
                     }
                 }
             });
@@ -652,8 +672,8 @@
                     labels: planData.map(d => d.label),
                     datasets: [{
                         data: planData.map(d => d.value),
-                        backgroundColor: ['#4f46e5', '#10b981', '#f59e0b'],
-                        borderColor: '#111827',
+                        backgroundColor: ['#8a70ff', '#ff6b35', '#00a8ff'],
+                        borderColor: '#ffffff',
                         borderWidth: 2
                     }]
                 },
@@ -661,7 +681,7 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'bottom', labels: { color: '#f3f4f6', font: { family: 'Outfit', size: 11 } } }
+                        legend: { position: 'bottom', labels: { color: legendColor, font: { family: 'Outfit', size: 11, weight: '600' } } }
                     }
                 }
             });
@@ -675,8 +695,8 @@
                     labels: channelData.map(d => d.label),
                     datasets: [{
                         data: channelData.map(d => d.value),
-                        backgroundColor: ['#6366f1', '#34d399', '#fbbf24', '#f87171'],
-                        borderColor: '#111827',
+                        backgroundColor: ['#8a70ff', '#10b981', '#ffa502', '#ff4757'],
+                        borderColor: '#ffffff',
                         borderWidth: 2
                     }]
                 },
@@ -684,7 +704,7 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'bottom', labels: { color: '#f3f4f6', font: { family: 'Outfit', size: 11 } } }
+                        legend: { position: 'bottom', labels: { color: legendColor, font: { family: 'Outfit', size: 11, weight: '600' } } }
                     }
                 }
             });
@@ -698,10 +718,11 @@
                     labels: steps.map(s => s.step),
                     datasets: [{
                         data: steps.map(s => s.count),
-                        backgroundColor: 'rgba(79, 70, 229, 0.7)',
-                        borderColor: '#818cf8',
+                        backgroundColor: 'rgba(138, 112, 255, 0.85)',
+                        borderColor: '#8a70ff',
                         borderWidth: 1.5,
-                        borderRadius: 6
+                        borderRadius: 8,
+                        borderSkipped: false
                     }]
                 },
                 options: {
@@ -725,8 +746,9 @@
                     labels: channels.map(c => c.channel),
                     datasets: [{
                         data: channels.map(c => c.conversion_rate),
-                        backgroundColor: '#10b981',
-                        borderRadius: 4
+                        backgroundColor: '#ff6b35',
+                        borderRadius: 8,
+                        borderSkipped: false
                     }]
                 },
                 options: {
@@ -753,8 +775,9 @@
                     labels: ['Control (Blue Button)', 'Variant (Green Button)'],
                     datasets: [{
                         data: [controlRate, variantRate],
-                        backgroundColor: ['#3b82f6', '#10b981'],
-                        borderRadius: 6
+                        backgroundColor: ['#00a8ff', '#ff6b35'],
+                        borderRadius: 8,
+                        borderSkipped: false
                     }]
                 },
                 options: {
@@ -763,7 +786,7 @@
                     scales: {
                         x: { grid: { display: false }, ticks: { color: textSecondary, font: fontConfig } },
                         y: { 
-                            title: { display: true, text: 'Conversion Rate (%)', color: '#f3f4f6' },
+                            title: { display: true, text: 'Conversion Rate (%)', color: legendColor, font: { family: 'Outfit', size: 12, weight: '600' } },
                             grid: { color: gridColor }, 
                             ticks: { color: textSecondary, font: fontConfig } 
                         }
@@ -783,12 +806,12 @@
                     datasets: [{
                         label: 'Monthly Active Users',
                         data: data.map(d => d.active_users),
-                        borderColor: '#818cf8',
-                        backgroundColor: 'rgba(129, 140, 248, 0.1)',
-                        pointBackgroundColor: '#818cf8',
+                        borderColor: '#8a70ff',
+                        backgroundColor: 'rgba(138, 112, 255, 0.1)',
+                        pointBackgroundColor: '#8a70ff',
                         fill: true,
                         tension: 0.35,
-                        borderWidth: 2
+                        borderWidth: 2.5
                     }]
                 },
                 options: {
@@ -814,8 +837,9 @@
                     labels: data.map(d => d.segment),
                     datasets: [{
                         data: data.map(d => d.user_count),
-                        backgroundColor: ['#4f46e5', '#818cf8', '#10b981', '#fbbf24', '#f87171', '#a7f3d0', '#fbcfe8'],
-                        borderRadius: 4
+                        backgroundColor: ['#8a70ff', '#a5b4fc', '#10b981', '#ffa502', '#ff4757', '#a7f3d0', '#fbcfe8'],
+                        borderRadius: 8,
+                        borderSkipped: false
                     }]
                 },
                 options: {
@@ -832,6 +856,7 @@
                 }
             });
         }
+
     </script>
 </body>
 </html>
