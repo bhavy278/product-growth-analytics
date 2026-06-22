@@ -1,4 +1,4 @@
-# Product Growth Analytics & A/B Testing Platform
+# Vana | Product Growth Analytics & A/B Testing Platform
 
 A production-grade product analytics platform and experimentation suite built to model product growth KPIs, retention metrics, user flow funnels, customer segmentation (RFM), and A/B test statistical significance. The platform simulates business intelligence workflows for a subscription SaaS product ("DataTrack Pro").
 

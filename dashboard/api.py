@@ -16,7 +16,7 @@ from advanced_analytics.cohort_analysis import calculate_cohort_retention
 from advanced_analytics.segmentation import calculate_rfm_segments
 from advanced_analytics.churn_predictor import predict_single_user_churn
 
-app = FastAPI(title="Product Growth Analytics & A/B Testing Platform API")
+app = FastAPI(title="Vana | Growth Analytics & A/B Testing API")
 
 # Database Connection
 db_url = "postgresql://postgres:postgres_password@localhost:5436/growth_analytics"
