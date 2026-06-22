@@ -1,12 +1,19 @@
 import os
 import random
-import uuid
+import urllib.request
+import argparse
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
 def main():
     print("Initializing Data Generator for Product Growth Analytics & A/B Testing Platform...")
+    
+    # Parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--sample-size', type=str, default='25000', 
+                        help='Number of users to sample from ab_data.csv, or "all" to use the entire dataset')
+    args = parser.parse_args()
     
     # Set random seeds for reproducibility
     random.seed(42)
@@ -17,13 +24,62 @@ def main():
     raw_dir = os.path.join(base_dir, "data", "raw")
     os.makedirs(raw_dir, exist_ok=True)
     
+    ab_data_path = os.path.join(raw_dir, "ab_data.csv")
+    
+    # Download ab_data.csv if it does not exist
+    if not os.path.exists(ab_data_path):
+        url = "https://raw.githubusercontent.com/ozlerhakan/ab-test/master/ab_data.csv"
+        print(f"Downloading {url} to {ab_data_path}...")
+        try:
+            urllib.request.urlretrieve(url, ab_data_path)
+            print("Download successful!")
+        except Exception as e:
+            print(f"Error downloading Kaggle dataset: {e}")
+            return
+            
+    # Load and clean ab_data.csv
+    print(f"Loading Kaggle A/B Testing Dataset from {ab_data_path}...")
+    df_ab = pd.read_csv(ab_data_path)
+    
+    # Clean mismatching rows: only keep old_page for control and new_page for treatment
+    df_ab = df_ab[
+        ((df_ab['group'] == 'control') & (df_ab['landing_page'] == 'old_page')) |
+        ((df_ab['group'] == 'treatment') & (df_ab['landing_page'] == 'new_page'))
+    ]
+    
+    # Drop duplicates by user_id
+    df_ab = df_ab.drop_duplicates(subset=['user_id'])
+    
+    # Handle sample size
+    total_users_available = len(df_ab)
+    if args.sample_size.lower() == 'all':
+        print(f"Using all {total_users_available} available users.")
+    else:
+        try:
+            sample_size = int(args.sample_size)
+            sample_size = min(sample_size, total_users_available)
+            df_ab = df_ab.sample(n=sample_size, random_state=42)
+            print(f"Sampled {sample_size} users from the original {total_users_available} users.")
+        except ValueError:
+            print(f"Invalid sample size '{args.sample_size}'. Defaulting to 25000 users.")
+            df_ab = df_ab.sample(n=min(25000, total_users_available), random_state=42)
+            
     # Simulation timeframe: 12 months (2025-06-22 to 2026-06-22)
     start_sim_date = datetime(2025, 6, 22)
     end_sim_date = datetime(2026, 6, 22)
-    total_days = (end_sim_date - start_sim_date).days
     
-    # Generate Users
-    num_users = 6200
+    # Shift and scale timestamps of the Kaggle dataset to cover the entire simulation window
+    df_ab['timestamp'] = pd.to_datetime(df_ab['timestamp'])
+    orig_min = df_ab['timestamp'].min()
+    orig_max = df_ab['timestamp'].max()
+    orig_range = orig_max - orig_min
+    target_range = end_sim_date - start_sim_date
+    
+    if orig_range.total_seconds() > 0:
+        df_ab['scaled_date'] = start_sim_date + (df_ab['timestamp'] - orig_min) * (target_range.total_seconds() / orig_range.total_seconds())
+    else:
+        df_ab['scaled_date'] = start_sim_date
+        
     users = []
     experiments = []
     subscriptions = []
@@ -41,25 +97,22 @@ def main():
     session_id_counter = 1
     event_id_counter = 1
     
-    print(f"Generating {num_users} users...")
+    print("Generating consistent relational entities based on A/B test data...")
     
-    for i in range(1, num_users + 1):
-        user_id = f"USR{i:04d}"
-        
-        # Signup Date (randomly distributed over the 12 months)
-        signup_days_offset = random.randint(0, total_days - 1)
-        signup_date = start_sim_date + timedelta(days=signup_days_offset)
+    for _, row in df_ab.iterrows():
+        user_id = f"USR_{row['user_id']}"
+        signup_date = row['scaled_date']
         
         country = random.choice(countries)
         channel = random.choice(channels)
         
-        # Determine experimental variant for users signing up from 2026-01-01
+        # Determine experimental variant for users signing up on or after 2026-01-01
         is_experiment = signup_date >= datetime(2026, 1, 1)
         variant = 'N/A'
         
         if is_experiment:
-            # 50/50 split
-            variant = 'Variant' if random.random() > 0.5 else 'Control'
+            # Variant mapping: control -> Control, treatment -> Variant
+            variant = 'Control' if row['group'] == 'control' else 'Variant'
             experiments.append({
                 'experiment_id': 'EXP_2026_CTA_COLOR',
                 'variant': variant,
@@ -67,16 +120,8 @@ def main():
                 'assigned_date': signup_date.strftime('%Y-%m-%d %H:%M:%S')
             })
             
-        # Determine conversion parameters based on cohort & variant
-        # Goal: Variant (Green CTA Button) has a significant conversion lift over Control (Blue CTA Button)
-        if variant == 'Variant':
-            conversion_prob = 0.12  # 12% upgrade rate
-        elif variant == 'Control':
-            conversion_prob = 0.08  # 8% upgrade rate
-        else:
-            conversion_prob = 0.075 # Baseline rate in 2025
-            
-        is_converted = random.random() < conversion_prob
+        # Conversion comes directly from the Kaggle converted column
+        is_converted = row['converted'] == 1
         plan_type = 'Free'
         
         if is_converted:
@@ -106,7 +151,6 @@ def main():
             
             # Check month-by-month if they churned before the end of simulation
             current_date = sub_start_date
-            subscription_months = 0
             churned = False
             
             while current_date < end_sim_date and not churned:
@@ -131,7 +175,6 @@ def main():
                     status = 'cancelled'
                 else:
                     current_date += timedelta(days=30)
-                    subscription_months += 1
             
             subscriptions.append({
                 'subscription_id': f"SUB{sub_id_counter:04d}",
@@ -199,7 +242,6 @@ def main():
             session_id_counter += 1
             
             # Generate events for this session
-            # Always have a page_view and login/signup
             sess_events = []
             
             # Check if this is the signup date session

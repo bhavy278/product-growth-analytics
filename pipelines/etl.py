@@ -2,7 +2,7 @@ import os
 import json
 import pandas as pd
 import numpy as np
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 def main():
     print("Initializing ETL Pipeline for Product Growth Analytics...")
@@ -71,6 +71,9 @@ def main():
         # Load into PostgreSQL staging tables
         table_name = f"raw_{dataset}"
         print(f"  -> Loading into PostgreSQL table: {table_name}...")
+        with engine.connect() as conn:
+            conn.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE"))
+            conn.commit()
         df.to_sql(table_name, engine, if_exists='replace', index=False)
         print(f"  -> Completed loading {table_name}.")
         
@@ -83,3 +86,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
