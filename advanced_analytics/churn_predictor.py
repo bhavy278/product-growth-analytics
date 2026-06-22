@@ -154,10 +154,9 @@ def predict_single_user_churn(plan, channel, session_count, recency, device_type
             le = encoders[col]
             # Handle unseen labels by falling back to the first class if not found
             val = input_data.loc[0, col]
-            if val in le.classes_:
-                input_data.loc[0, col] = le.transform([val])[0]
-            else:
-                input_data.loc[0, col] = 0
+            encoded_val = int(le.transform([val])[0]) if val in le.classes_ else 0
+            input_data[col] = [encoded_val]
+
                 
         # Make prediction
         prob = model.predict_proba(input_data)[0][1]
