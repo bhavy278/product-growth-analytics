@@ -9,6 +9,15 @@
     <link rel="stylesheet" href="/static/index.css">
 </head>
 <body>
+    <!-- Global Loading Overlay -->
+    <div id="global-loader" class="loader-overlay">
+        <div class="loader-content">
+            <div class="spinner"></div>
+            <h2>Product Growth Analytics</h2>
+            <p>Aggregating millions of database event records...</p>
+        </div>
+    </div>
+
     <div class="container">
         <!-- Header -->
         <header class="glass-card">
@@ -62,12 +71,18 @@
         <div id="view-exec" class="dashboard-view active">
             <div class="chart-grid">
                 <div class="glass-card">
+                    <div class="card-loader" id="loader-exec-trends">
+                        <div class="small-spinner"></div>
+                    </div>
                     <h3 class="chart-title">Active User Growth Trends (MAU / WAU / DAU)</h3>
                     <div class="chart-wrapper">
                         <canvas id="activeUsersChart"></canvas>
                     </div>
                 </div>
                 <div class="glass-card">
+                    <div class="card-loader" id="loader-exec-segments">
+                        <div class="small-spinner"></div>
+                    </div>
                     <h3 class="chart-title">Growth Segment Mix (RFM Segmentation)</h3>
                     <div class="chart-wrapper">
                         <canvas id="rfmSegmentsChart"></canvas>
@@ -80,12 +95,18 @@
         <div id="view-funnel" class="dashboard-view">
             <div class="chart-grid">
                 <div class="glass-card">
+                    <div class="card-loader" id="loader-funnel">
+                        <div class="small-spinner"></div>
+                    </div>
                     <h3 class="chart-title">SaaS Signup-to-Upgrade Conversion Funnel</h3>
                     <div class="chart-wrapper">
                         <canvas id="funnelChart"></canvas>
                     </div>
                 </div>
                 <div class="glass-card">
+                    <div class="card-loader" id="loader-channel-conv">
+                        <div class="small-spinner"></div>
+                    </div>
                     <h3 class="chart-title">Paid Upgrade Conversion Rate by Acquisition Channel</h3>
                     <div class="chart-wrapper">
                         <canvas id="channelConversionsChart"></canvas>
@@ -97,6 +118,9 @@
         <!-- View 3: Cohort Retention Dashboard -->
         <div id="view-retention" class="dashboard-view">
             <div class="glass-card">
+                <div class="card-loader" id="loader-cohort-heatmap">
+                    <div class="small-spinner"></div>
+                </div>
                 <h3 class="chart-title">Monthly User Cohort Retention Heatmap</h3>
                 <div class="cohort-table-wrapper">
                     <table class="cohort-table" id="cohort-heatmap-table">
@@ -106,6 +130,9 @@
             </div>
             
             <div class="glass-card">
+                <div class="card-loader" id="loader-retention-curves">
+                    <div class="small-spinner"></div>
+                </div>
                 <h3 class="chart-title">User Retention Curves over Time</h3>
                 <div class="chart-wrapper">
                     <canvas id="retentionCurvesChart"></canvas>
@@ -134,7 +161,11 @@
         <!-- View 5: A/B Testing & Experiments View -->
         <div id="view-experiment" class="dashboard-view">
             <div class="glass-card" style="margin-bottom: 2rem;">
+                <div class="card-loader" id="loader-experiment">
+                    <div class="small-spinner"></div>
+                </div>
                 <h3 class="chart-title">Experiment Analysis: Green vs Blue CTA Buttons</h3>
+
                 <div class="form-grid" style="margin-bottom: 1.5rem;">
                     <div>
                         <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>Experiment ID:</strong> EXP_2026_CTA_COLOR</p>
@@ -269,13 +300,49 @@
     <script>
         let charts = {};
         
-        document.addEventListener("DOMContentLoaded", () => {
-            fetchKPIs();
-            fetchFunnels();
-            fetchCohorts();
-            fetchExperiments();
-            fetchExecutiveTrends();
-            fetchSegments();
+        // Track which views have already loaded their data to prevent redundant fetches
+        const loadedStates = {
+            exec: false,
+            funnel: false,
+            retention: false,
+            experiment: false
+        };
+
+        function showCardLoader(id) {
+            const loader = document.getElementById(id);
+            if (loader) loader.classList.remove('hidden');
+        }
+
+        function hideCardLoader(id) {
+            const loader = document.getElementById(id);
+            if (loader) loader.classList.add('hidden');
+        }
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            // Load initial executive dashboard and KPIs
+            try {
+                showCardLoader("loader-exec-trends");
+                showCardLoader("loader-exec-segments");
+                
+                await Promise.all([
+                    fetchKPIs(),
+                    fetchExecutiveTrends(),
+                    fetchSegments()
+                ]);
+                
+                loadedStates.exec = true;
+            } catch (err) {
+                console.error("Initial load error:", err);
+            } finally {
+                hideCardLoader("loader-exec-trends");
+                hideCardLoader("loader-exec-segments");
+                
+                // Hide global page loading overlay
+                const globalLoader = document.getElementById("global-loader");
+                if (globalLoader) {
+                    globalLoader.classList.add("hidden");
+                }
+            }
             
             // Support URL hash navigation
             if (window.location.hash) {
@@ -306,7 +373,7 @@
             }
         }
 
-        function switchView(viewName) {
+        async function switchView(viewName) {
             const tabs = ['exec', 'funnel', 'retention', 'revenue', 'experiment', 'tools'];
             tabs.forEach(t => {
                 document.getElementById(`tab-${t}`).classList.remove('active');
@@ -315,6 +382,37 @@
 
             document.getElementById(`tab-${viewName}`).classList.add('active');
             document.getElementById(`view-${viewName}`).classList.add('active');
+
+            // Lazy load view data on tab activation
+            if (viewName === 'funnel' && !loadedStates.funnel) {
+                try {
+                    showCardLoader("loader-funnel");
+                    showCardLoader("loader-channel-conv");
+                    await fetchFunnels();
+                    loadedStates.funnel = true;
+                } finally {
+                    hideCardLoader("loader-funnel");
+                    hideCardLoader("loader-channel-conv");
+                }
+            } else if (viewName === 'retention' && !loadedStates.retention) {
+                try {
+                    showCardLoader("loader-cohort-heatmap");
+                    showCardLoader("loader-retention-curves");
+                    await fetchCohorts();
+                    loadedStates.retention = true;
+                } finally {
+                    hideCardLoader("loader-cohort-heatmap");
+                    hideCardLoader("loader-retention-curves");
+                }
+            } else if (viewName === 'experiment' && !loadedStates.experiment) {
+                try {
+                    showCardLoader("loader-experiment");
+                    await fetchExperiments();
+                    loadedStates.experiment = true;
+                } finally {
+                    hideCardLoader("loader-experiment");
+                }
+            }
         }
 
         async function fetchKPIs() {
