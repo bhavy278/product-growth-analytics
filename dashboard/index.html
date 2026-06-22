@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Growth Analytics & A/B Testing Platform</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/index.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="glass-card">
+            <div class="logo-container">
+                <h1>Product Growth Analytics</h1>
+                <p>Evidence-based growth, conversion tracking, cohort retention, and A/B test significance engine</p>
+            </div>
+            <div>
+                <div class="badge-db">
+                    <span class="pulse-dot" style="width: 8px; height: 8px; background-color: var(--emerald); border-radius: 50%; display: inline-block;"></span>
+                    Warehouse Connected (PostgreSQL)
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="tabs-container">
+            <button id="tab-exec" class="tab-btn active" onclick="switchView('exec')">Executive Summary</button>
+            <button id="tab-funnel" class="tab-btn" onclick="switchView('funnel')">Conversion Funnel</button>
+            <button id="tab-retention" class="tab-btn" onclick="switchView('retention')">Cohort Retention</button>
+            <button id="tab-revenue" class="tab-btn" onclick="switchView('revenue')">MRR & ARR Analytics</button>
+            <button id="tab-experiment" class="tab-btn" onclick="switchView('experiment')">A/B Experiments</button>
+            <button id="tab-tools" class="tab-btn" onclick="switchView('tools')">Analytics Tools</button>
+        </div>
+
+        <!-- KPI Summary Cards (Global context) -->
+        <div class="kpi-grid">
+            <div class="glass-card kpi-card">
+                <span class="kpi-title">Total Users</span>
+                <span class="kpi-value" id="kpi-total-users">0</span>
+                <span class="kpi-footer">Cumulative registered accounts</span>
+            </div>
+            <div class="glass-card kpi-card green">
+                <span class="kpi-title">Monthly Active (MAU)</span>
+                <span class="kpi-value" id="kpi-mau">0</span>
+                <span class="kpi-footer" id="kpi-dau-mau-ratio">DAU/MAU: 0.0%</span>
+            </div>
+            <div class="glass-card kpi-card amber">
+                <span class="kpi-title">Monthly Revenue (MRR)</span>
+                <span class="kpi-value" id="kpi-mrr">$0</span>
+                <span class="kpi-footer" id="kpi-arr">ARR: $0</span>
+            </div>
+            <div class="glass-card kpi-card rose">
+                <span class="kpi-title">Average LTV</span>
+                <span class="kpi-value" id="kpi-ltv">$0</span>
+                <span class="kpi-footer" id="kpi-churn-rate">Churn Rate: 0.0%</span>
+            </div>
+        </div>
+
+        <!-- View 1: Executive Dashboard -->
+        <div id="view-exec" class="dashboard-view active">
+            <div class="chart-grid">
+                <div class="glass-card">
+                    <h3 class="chart-title">Active User Growth Trends (MAU / WAU / DAU)</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="activeUsersChart"></canvas>
+                    </div>
+                </div>
+                <div class="glass-card">
+                    <h3 class="chart-title">Growth Segment Mix (RFM Segmentation)</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="rfmSegmentsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 2: Conversion Funnel Dashboard -->
+        <div id="view-funnel" class="dashboard-view">
+            <div class="chart-grid">
+                <div class="glass-card">
+                    <h3 class="chart-title">SaaS Signup-to-Upgrade Conversion Funnel</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="funnelChart"></canvas>
+                    </div>
+                </div>
+                <div class="glass-card">
+                    <h3 class="chart-title">Paid Upgrade Conversion Rate by Acquisition Channel</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="channelConversionsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 3: Cohort Retention Dashboard -->
+        <div id="view-retention" class="dashboard-view">
+            <div class="glass-card">
+                <h3 class="chart-title">Monthly User Cohort Retention Heatmap</h3>
+                <div class="cohort-table-wrapper">
+                    <table class="cohort-table" id="cohort-heatmap-table">
+                        <!-- Headmap columns generated by JS -->
+                    </table>
+                </div>
+            </div>
+            
+            <div class="glass-card">
+                <h3 class="chart-title">User Retention Curves over Time</h3>
+                <div class="chart-wrapper">
+                    <canvas id="retentionCurvesChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 4: Revenue & Subscription Dashboard -->
+        <div id="view-revenue" class="dashboard-view">
+            <div class="chart-grid">
+                <div class="glass-card">
+                    <h3 class="chart-title">Revenue Contribution by Subscription Plan</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="planRevenueChart"></canvas>
+                    </div>
+                </div>
+                <div class="glass-card">
+                    <h3 class="chart-title">Revenue Share by Acquisition Channel</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="channelRevenueChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 5: A/B Testing & Experiments View -->
+        <div id="view-experiment" class="dashboard-view">
+            <div class="glass-card" style="margin-bottom: 2rem;">
+                <h3 class="chart-title">Experiment Analysis: Green vs Blue CTA Buttons</h3>
+                <div class="form-grid" style="margin-bottom: 1.5rem;">
+                    <div>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>Experiment ID:</strong> EXP_2026_CTA_COLOR</p>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>Control Variant (Blue CTA):</strong> Baseline conversion layout.</p>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary);"><strong>Test Variant (Green CTA):</strong> Highlighted checkout CTA color.</p>
+                    </div>
+                    <div style="border-left: 1px solid var(--border-color); padding-left: 1.5rem;">
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>Z-Score:</strong> <span id="exp-z-score">0.0</span></p>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>P-value:</strong> <span id="exp-p-value">1.0</span></p>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary);"><strong>Significance:</strong> <span id="exp-significance" class="significance-badge failed">Checking...</span></p>
+                    </div>
+                </div>
+                <div class="chart-wrapper" style="height: 350px;">
+                    <canvas id="experimentChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 6: Analytics Tools (Simulators & Predictions) -->
+        <div id="view-tools" class="dashboard-view">
+            <div class="chart-grid">
+                <!-- Churn Risk Predictor -->
+                <div class="glass-card">
+                    <h3 class="chart-title">🔮 Machine Learning Churn Risk Predictor</h3>
+                    <form id="churn-form" onsubmit="event.preventDefault(); predictChurnRisk();">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="c-plan">Subscription Plan</label>
+                                <select id="c-plan">
+                                    <option value="Pro">Pro ($29/mo)</option>
+                                    <option value="Enterprise">Enterprise ($299/mo)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="c-channel">Acquisition Channel</label>
+                                <select id="c-channel">
+                                    <option value="Google">Google</option>
+                                    <option value="Meta">Meta</option>
+                                    <option value="Organic">Organic</option>
+                                    <option value="Referral">Referral</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="c-sessions">Sessions Count</label>
+                                <input type="number" id="c-sessions" value="12" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="c-recency">Recency (Days since last session)</label>
+                                <input type="number" id="c-recency" value="5" min="0">
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="c-device">Device Type</label>
+                                <select id="c-device">
+                                    <option value="Desktop">Desktop</option>
+                                    <option value="Mobile">Mobile</option>
+                                    <option value="Tablet">Tablet</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="c-events">Total Events Count</label>
+                                <input type="number" id="c-events" value="48" min="1">
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="c-revenue">Total Cumulative Payments ($)</label>
+                                <input type="number" id="c-revenue" value="87.00" min="0.0" step="0.01">
+                            </div>
+                            <div class="form-group">
+                                <label style="opacity:0;">Placeholder</label>
+                                <button type="submit" class="btn-submit">Estimate Churn Risk</button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div id="churn-result-card" class="result-card" style="display:none;">
+                        <h4 style="margin-bottom:0.75rem;">Estimated Churn Probability</h4>
+                        <div style="background:rgba(255,255,255,0.05); border-radius:4px; height:10px; width:100%; overflow:hidden; margin-bottom:0.5rem;">
+                            <div id="churn-progress-bar" style="background:var(--emerald); height:100%; width:0%; transition: width 0.3s ease;"></div>
+                        </div>
+                        <p style="font-weight:600; font-size:1.1rem;"><span id="churn-prob-text">0.0%</span> risk (<span id="churn-risk-level">Low</span>)</p>
+                    </div>
+                </div>
+
+                <!-- A/B Test Simulator -->
+                <div class="glass-card">
+                    <h3 class="chart-title">⚖️ A/B Testing Statistical Significance Simulator</h3>
+                    <form id="ab-simulator-form" onsubmit="event.preventDefault(); simulateABTest();">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="sim-c-size">Control Group Size (N)</label>
+                                <input type="number" id="sim-c-size" value="1000" min="10">
+                            </div>
+                            <div class="form-group">
+                                <label for="sim-c-conv">Control Conversions</label>
+                                <input type="number" id="sim-c-conv" value="80" min="0">
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="sim-v-size">Variant Group Size (N)</label>
+                                <input type="number" id="sim-v-size" value="1000" min="10">
+                            </div>
+                            <div class="form-group">
+                                <label for="sim-v-conv">Variant Conversions</label>
+                                <input type="number" id="sim-v-conv" value="110" min="0">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-submit" style="width:100%;">Calculate Statistical Significance</button>
+                    </form>
+
+                    <div id="sim-result-card" class="result-card" style="display:none;">
+                        <h4 style="margin-bottom:0.75rem;">Significance Engine Report</h4>
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>Lift %:</strong> <span id="sim-lift">0.0%</span></p>
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>Z-Score:</strong> <span id="sim-z-score">0.0</span></p>
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>P-value:</strong> <span id="sim-p-value">1.0</span></p>
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>95% Confidence Interval:</strong> [<span id="sim-ci-lower">0.0%</span>, <span id="sim-ci-upper">0.0%</span>]</p>
+                        <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:0.75rem;">
+                            <strong>Outcome:</strong> <span id="sim-outcome" class="significance-badge success">Significance Detected</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script layer to handle Tab switching, API fetching, and Chart renderings -->
+    <script>
+        let charts = {};
+        
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchKPIs();
+            fetchFunnels();
+            fetchCohorts();
+            fetchExperiments();
+            fetchExecutiveTrends();
+            fetchSegments();
+            
+            // Support URL hash navigation
+            if (window.location.hash) {
+                const initialView = window.location.hash.substring(1);
+                if (['exec', 'funnel', 'retention', 'revenue', 'experiment', 'tools'].includes(initialView)) {
+                    switchView(initialView);
+                }
+            }
+        });
+
+        async function fetchExecutiveTrends() {
+            try {
+                const res = await fetch("/api/active-users");
+                const data = await res.json();
+                renderActiveUsersChart(data);
+            } catch (err) {
+                console.error("Error loading active user trends:", err);
+            }
+        }
+
+        async function fetchSegments() {
+            try {
+                const res = await fetch("/api/segments");
+                const data = await res.json();
+                renderSegmentsChart(data);
+            } catch (err) {
+                console.error("Error loading segments:", err);
+            }
+        }
+
+        function switchView(viewName) {
+            const tabs = ['exec', 'funnel', 'retention', 'revenue', 'experiment', 'tools'];
+            tabs.forEach(t => {
+                document.getElementById(`tab-${t}`).classList.remove('active');
+                document.getElementById(`view-${t}`).classList.remove('active');
+            });
+
+            document.getElementById(`tab-${viewName}`).classList.add('active');
+            document.getElementById(`view-${viewName}`).classList.add('active');
+        }
+
+        async function fetchKPIs() {
+            try {
+                const res = await fetch("/api/kpis");
+                const data = await res.json();
+                
+                document.getElementById("kpi-total-users").innerText = data.total_users.toLocaleString();
+                document.getElementById("kpi-mau").innerText = data.mau.toLocaleString();
+                document.getElementById("kpi-mrr").innerText = "$" + data.mrr.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
+                document.getElementById("kpi-arr").innerText = "ARR: $" + data.arr.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
+                document.getElementById("kpi-ltv").innerText = "$" + data.ltv.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
+                document.getElementById("kpi-churn-rate").innerText = "Churn Rate: " + data.churn_rate.toFixed(1) + "%";
+                
+                const dauMauRatio = (data.dau / data.mau * 100).toFixed(1);
+                document.getElementById("kpi-dau-mau-ratio").innerText = "DAU/MAU: " + dauMauRatio + "%";
+                
+                renderPlanRevenue(data.plan_revenue);
+                renderChannelRevenue(data.channel_revenue);
+            } catch (err) {
+                console.error("Error loading KPIs:", err);
+            }
+        }
+
+        async function fetchFunnels() {
+            try {
+                const res = await fetch("/api/funnels");
+                const data = await res.json();
+                
+                renderFunnelChart(data.steps);
+                renderChannelConversions(data.channels);
+            } catch (err) {
+                console.error("Error loading funnels:", err);
+            }
+        }
+
+        async function fetchCohorts() {
+            try {
+                const res = await fetch("/api/cohorts");
+                const data = await res.json();
+                
+                renderCohortHeatmapTable(data);
+                renderRetentionCurvesChart(data);
+            } catch (err) {
+                console.error("Error loading cohorts:", err);
+            }
+        }
+
+        async function fetchExperiments() {
+            try {
+                const res = await fetch("/api/experiments");
+                const data = await res.json();
+                
+                document.getElementById("exp-z-score").innerText = data.z_test.z_score.toFixed(3);
+                document.getElementById("exp-p-value").innerText = data.z_test.p_value.toFixed(4);
+                
+                const sigBadge = document.getElementById("exp-significance");
+                if (data.z_test.significant) {
+                    sigBadge.innerText = "Significant";
+                    sigBadge.className = "significance-badge success";
+                } else {
+                    sigBadge.innerText = "Not Significant";
+                    sigBadge.className = "significance-badge failed";
+                }
+                
+                renderExperimentChart(data);
+            } catch (err) {
+                console.error("Error loading experiments:", err);
+            }
+        }
+
+        async function predictChurnRisk() {
+            const plan = document.getElementById("c-plan").value;
+            const channel = document.getElementById("c-channel").value;
+            const session_count = parseInt(document.getElementById("c-sessions").value);
+            const recency = parseInt(document.getElementById("c-recency").value);
+            const device_type = document.getElementById("c-device").value;
+            const search_count = parseInt(document.getElementById("c-events").value) / 4; # mock division
+            const pv_count = parseInt(document.getElementById("c-events").value) / 2;
+            const total_events = parseInt(document.getElementById("c-events").value);
+            const total_revenue = parseFloat(document.getElementById("c-revenue").value);
+            
+            try {
+                const res = await fetch("/api/predict-churn", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ plan, channel, session_count, recency, device_type, search_count, pv_count, total_events, total_revenue })
+                });
+                const data = await res.json();
+                
+                const resultCard = document.getElementById("churn-result-card");
+                resultCard.style.display = "block";
+                
+                const probVal = data.churn_probability * 100;
+                document.getElementById("churn-prob-text").innerText = probVal.toFixed(1) + "%";
+                
+                const progressBar = document.getElementById("churn-progress-bar");
+                progressBar.style.width = probVal + "%";
+                
+                const riskLevel = document.getElementById("churn-risk-level");
+                if (probVal < 30) {
+                    riskLevel.innerText = "Low";
+                    progressBar.style.background = "var(--emerald)";
+                } else if (probVal < 70) {
+                    riskLevel.innerText = "Medium";
+                    progressBar.style.background = "var(--amber)";
+                } else {
+                    riskLevel.innerText = "High";
+                    progressBar.style.background = "var(--rose)";
+                }
+            } catch (err) {
+                console.error("Error predicting churn:", err);
+            }
+        }
+
+        async function simulateABTest() {
+            const control_size = parseInt(document.getElementById("sim-c-size").value);
+            const control_conversions = parseInt(document.getElementById("sim-c-conv").value);
+            const variant_size = parseInt(document.getElementById("sim-v-size").value);
+            const variant_conversions = parseInt(document.getElementById("sim-v-conv").value);
+            
+            try {
+                const res = await fetch("/api/simulate-experiment", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ control_conversions, control_size, variant_conversions, variant_size })
+                });
+                const data = await res.json();
+                
+                const resultCard = document.getElementById("sim-result-card");
+                resultCard.style.display = "block";
+                
+                document.getElementById("sim-lift").innerText = (data.z_test.lift_pct >= 0 ? "+" : "") + data.z_test.lift_pct.toFixed(2) + "%";
+                document.getElementById("sim-z-score").innerText = data.z_test.z_score.toFixed(3);
+                document.getElementById("sim-p-value").innerText = data.z_test.p_value.toFixed(4);
+                document.getElementById("sim-ci-lower").innerText = (data.z_test.ci_lower * 100).toFixed(2) + "%";
+                document.getElementById("sim-ci-upper").innerText = (data.z_test.ci_upper * 100).toFixed(2) + "%";
+                
+                const outcome = document.getElementById("sim-outcome");
+                if (data.z_test.significant) {
+                    outcome.innerText = "Significant Lift Detected";
+                    outcome.className = "significance-badge success";
+                } else {
+                    outcome.innerText = "No Statistically Significant Difference";
+                    outcome.className = "significance-badge failed";
+                }
+            } catch (err) {
+                console.error("Error simulating test:", err);
+            }
+        }
+
+        /* Chart.js Rendering Logic */
+        const fontConfig = { family: 'Outfit', size: 11, weight: '500' };
+        const gridColor = 'rgba(255, 255, 255, 0.05)';
+        const textSecondary = '#9ca3af';
+
+        function renderCohortHeatmapTable(cohorts) {
+            const table = document.getElementById("cohort-heatmap-table");
+            table.innerHTML = "";
+            
+            // Header
+            let headerRow = "<tr><th class='cohort-header'>Cohort Month</th><th class='size-header'>Cohort Size</th>";
+            for (let i = 0; i <= 11; i++) {
+                headerRow += `<th>Month ${i}</th>`;
+            }
+            headerRow += "</tr>";
+            table.innerHTML += headerRow;
+            
+            // Heatmap rows
+            cohorts.forEach(c => {
+                let row = `<tr><td class='cohort-header'>${c.cohort_month}</td><td class='size-header'>${c.cohort_size.toLocaleString()} users</td>`;
+                for (let i = 0; i <= 11; i++) {
+                    const val = c.retention_rates[i];
+                    if (val !== undefined) {
+                        const pct = (val * 100).toFixed(1) + "%";
+                        // Color cell based on value
+                        const colorWeight = Math.round(val * 100);
+                        const bg = `hsla(243, 75%, 59%, ${val.toFixed(2)})`;
+                        const text = val > 0.4 ? "#ffffff" : "var(--text-primary)";
+                        row += `<td style="background-color: ${bg}; color: ${text}; font-weight: 600;">${pct}</td>`;
+                    } else {
+                        row += "<td>-</td>";
+                    }
+                }
+                row += "</tr>";
+                table.innerHTML += row;
+            });
+        }
+
+        function renderRetentionCurvesChart(cohorts) {
+            if (charts.retention) charts.retention.destroy();
+            
+            // We select a subset of cohorts to plot (e.g. 3 oldest cohorts)
+            const datasets = cohorts.slice(0, 4).map((c, idx) => {
+                const colors = ['#818cf8', '#10b981', '#f59e0b', '#f43f5e'];
+                const data = [];
+                for (let i = 0; i <= 11; i++) {
+                    if (c.retention_rates[i] !== undefined) {
+                        data.push(c.retention_rates[i] * 100);
+                    }
+                }
+                return {
+                    label: c.cohort_month,
+                    data: data,
+                    borderColor: colors[idx % colors.length],
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    tension: 0.2
+                };
+            });
+
+            charts.retention = new Chart(document.getElementById("retentionCurvesChart"), {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 12}, (_, i) => `Month ${i}`),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { color: gridColor }, ticks: { color: textSecondary, font: fontConfig } },
+                        y: { grid: { color: gridColor }, ticks: { color: textSecondary, font: fontConfig }, min: 0, max: 100 }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#f3f4f6', font: { family: 'Outfit', size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        function renderPlanRevenue(planData) {
+            if (charts.planRev) charts.planRev.destroy();
+            charts.planRev = new Chart(document.getElementById("planRevenueChart"), {
+                type: 'doughnut',
+                data: {
+                    labels: planData.map(d => d.label),
+                    datasets: [{
+                        data: planData.map(d => d.value),
+                        backgroundColor: ['#4f46e5', '#10b981', '#f59e0b'],
+                        borderColor: '#111827',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#f3f4f6', font: { family: 'Outfit', size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        function renderChannelRevenue(channelData) {
+            if (charts.channelRev) charts.channelRev.destroy();
+            charts.channelRev = new Chart(document.getElementById("channelRevenueChart"), {
+                type: 'pie',
+                data: {
+                    labels: channelData.map(d => d.label),
+                    datasets: [{
+                        data: channelData.map(d => d.value),
+                        backgroundColor: ['#6366f1', '#34d399', '#fbbf24', '#f87171'],
+                        borderColor: '#111827',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#f3f4f6', font: { family: 'Outfit', size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        function renderFunnelChart(steps) {
+            if (charts.funnel) charts.funnel.destroy();
+            charts.funnel = new Chart(document.getElementById("funnelChart"), {
+                type: 'bar',
+                data: {
+                    labels: steps.map(s => s.step),
+                    datasets: [{
+                        data: steps.map(s => s.count),
+                        backgroundColor: 'rgba(79, 70, 229, 0.7)',
+                        borderColor: '#818cf8',
+                        borderWidth: 1.5,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: { grid: { color: gridColor }, ticks: { color: textSecondary, font: fontConfig } },
+                        y: { grid: { display: false }, ticks: { color: textSecondary, font: fontConfig } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function renderChannelConversions(channels) {
+            if (charts.channelConv) charts.channelConv.destroy();
+            charts.channelConv = new Chart(document.getElementById("channelConversionsChart"), {
+                type: 'bar',
+                data: {
+                    labels: channels.map(c => c.channel),
+                    datasets: [{
+                        data: channels.map(c => c.conversion_rate),
+                        backgroundColor: '#10b981',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: textSecondary, font: fontConfig } },
+                        y: { grid: { color: gridColor }, ticks: { color: textSecondary, font: fontConfig } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function renderExperimentChart(data) {
+            if (charts.experiment) charts.experiment.destroy();
+            
+            const controlRate = data.z_test.control_rate * 100;
+            const variantRate = data.z_test.variant_rate * 100;
+            
+            charts.experiment = new Chart(document.getElementById("experimentChart"), {
+                type: 'bar',
+                data: {
+                    labels: ['Control (Blue Button)', 'Variant (Green Button)'],
+                    datasets: [{
+                        data: [controlRate, variantRate],
+                        backgroundColor: ['#3b82f6', '#10b981'],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: textSecondary, font: fontConfig } },
+                        y: { 
+                            title: { display: true, text: 'Conversion Rate (%)', color: '#f3f4f6' },
+                            grid: { color: gridColor }, 
+                            ticks: { color: textSecondary, font: fontConfig } 
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function renderActiveUsersChart(data) {
+            if (charts.activeUsers) charts.activeUsers.destroy();
+            
+            charts.activeUsers = new Chart(document.getElementById("activeUsersChart"), {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.month),
+                    datasets: [{
+                        label: 'Monthly Active Users',
+                        data: data.map(d => d.active_users),
+                        borderColor: '#818cf8',
+                        backgroundColor: 'rgba(129, 140, 248, 0.1)',
+                        pointBackgroundColor: '#818cf8',
+                        fill: true,
+                        tension: 0.35,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { color: gridColor }, ticks: { color: textSecondary, font: fontConfig } },
+                        y: { grid: { color: gridColor }, ticks: { color: textSecondary, font: fontConfig } }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function renderSegmentsChart(data) {
+            if (charts.segments) charts.segments.destroy();
+            
+            charts.segments = new Chart(document.getElementById("rfmSegmentsChart"), {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.segment),
+                    datasets: [{
+                        data: data.map(d => d.user_count),
+                        backgroundColor: ['#4f46e5', '#818cf8', '#10b981', '#fbbf24', '#f87171', '#a7f3d0', '#fbcfe8'],
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: { grid: { color: gridColor }, ticks: { color: textSecondary, font: fontConfig } },
+                        y: { grid: { display: false }, ticks: { color: textSecondary, font: fontConfig } }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

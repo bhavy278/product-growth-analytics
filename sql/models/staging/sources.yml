@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: staging_sources
+    database: growth_analytics
+    schema: public
+    tables:
+      - name: raw_users
+      - name: raw_sessions
+      - name: raw_events
+      - name: raw_subscriptions
+      - name: raw_payments
+      - name: raw_experiments

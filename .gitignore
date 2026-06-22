@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Databases & Cache
+pgdata/
+target/
+dbt_packages/
+logs/
+*.log
+
+# Large datasets (we generate these locally)
+data/raw/
+data/processed/
+data/staging/
+
+# OS
+.DS_Store
