@@ -43,8 +43,8 @@ def calculate_cohort_retention():
     # Pivot to get matrix
     cohort_matrix = cohort_group.pivot(index='cohort_month', columns='cohort_index', values='user_id')
     
-    # Get cohort sizes (Month 0 value)
-    cohort_sizes = cohort_matrix.iloc[:, 0]
+    # Get actual cohort sizes (total users signed up in each cohort month)
+    cohort_sizes = df_users.groupby('cohort_month')['user_id'].nunique()
     
     # Divide by cohort size to get percentages
     retention_matrix = cohort_matrix.divide(cohort_sizes, axis=0)
